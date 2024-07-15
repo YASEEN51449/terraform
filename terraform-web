@@ -1,0 +1,81 @@
+root@ip-172-31-45-11:/my-project# cat file.tf
+provider "aws" {
+  region = "ap-south-1"
+}
+
+#security group
+
+resource "aws_security_group" "devserver_access" {
+  name        = "devserver_access"
+  description = "allow ssh and http"
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+#security group end here
+
+resource "aws_eip" "vol-eip" {
+  instance = aws_instance.volume.id
+
+}
+resource "aws_instance" "volume" {
+  ami               = "ami-0ec0e125bb6c6e8ec"
+  availability_zone = "ap-south-1a"
+  instance_type     = "t2.micro"
+  security_groups   = ["${aws_security_group.devserver_access.name}"]
+
+  /* the key mumbai-key must be downloaded in your machine from where
+  you are executing this code. So first create the key, download it
+  and then use it */
+
+  key_name = "mumbai-key"
+
+  #root disk
+
+  root_block_device {
+    volume_size           = "25"
+    volume_type           = "gp2"
+    delete_on_termination = true
+  }
+
+  #additional data disk
+
+  ebs_block_device {
+    device_name           = "/dev/xvdb"
+    volume_size           = "10"
+    volume_type           = "gp2"
+    delete_on_termination = true
+
+  }
+
+  user_data = <<-EOF
+        #!/bin/bash
+        sudo apt update
+        sudo apt install apache2 -y
+        sudo systemctl start apache2
+        sudo systemctl enable apache2
+        echo "<h1>sample webserver using terraform</h1>" | sudo tee /var/www/html/index.html
+  EOF
+  tags = {
+    Name     = "Hello-Yaseen"
+    Stage    = "testing"
+    Location = "India"
+  }
+
+}
