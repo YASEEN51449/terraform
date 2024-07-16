@@ -1,0 +1,167 @@
+
+ 
+ 
+step 1: Launch an ec2 instance and connect to the terminal.
+Launch instance -> name -> redhat -> keys -> deafault Vpc -> subnet(1a) -> auto assignn enable -> select sg -> launch
+step 2: Install awscli and terraform in the terminal.
+-> sudo su -
+-> yum update -y
+awscli
+-> yum install unzip -y
+-> curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+-> unzip awscliv2.zip
+-> sudo ./aws/install
+terraform
+-> yum install -y yum-utils
+-> yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+-> yum -y install terraform
+-> terraform --version
+step 3: Create an IAM user and create an access key for the user.
+step 4: Configure aws in the terminal by providing the access key of the user.
+->aws configue
+step 5: Create a directory and create a terraform file in the directory.
+mkdir /data
+cd /data
+yum install vim -y
+vim terra-data.tf
+ 
+provider "aws" {
+  region = "us-east-1"
+}
+###This is vpc code
+resource "aws_vpc" "test-vpc" {
+  cidr_block = "10.0.0.0/16"
+}
+#This is subnet code
+resource "aws_subnet" "public-subnet" {
+  vpc_id     = aws_vpc.test-vpc.id
+  cidr_block = "10.0.0.0/24"
+  tags = {
+    Name = "Public-subnet"
+  }
+}
+resource "aws_subnet" "private-subnet" {
+  vpc_id     = aws_vpc.test-vpc.id
+  cidr_block = "10.0.1.0/24"
+  tags = {
+    Name = "Private-subnet"
+  }
+}
+#internet gateway code
+resource "aws_internet_gateway" "test-igw" {
+  vpc_id = aws_vpc.test-vpc.id
+  tags = {
+    Name = "test-igw"
+  }
+}
+#create a public ip for nat gateway
+resource "aws_eip" "nat-eip" {
+}
+###create nat gateway
+resource "aws_nat_gateway" "my-ngw" {
+  allocation_id = aws_eip.nat-eip.id
+  subnet_id     = aws_subnet.public-subnet.id
+}
+#public route table code
+resource "aws_route_table" "public-rt" {
+  vpc_id = aws_vpc.test-vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.test-igw.id
+  }
+  tags = {
+    Name = "public-rt"
+  }
+}
+#route table association code
+resource "aws_route_table_association" "public-asso" {
+  subnet_id      = aws_subnet.public-subnet.id
+  route_table_id = aws_route_table.public-rt.id
+}
+#create private route table
+resource "aws_route_table" "private-rt" {
+  vpc_id = aws_vpc.test-vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_nat_gateway.my-ngw.id
+  }
+  tags = {
+    Name = "private-rt"
+  }
+}
+#route table association code
+resource "aws_route_table_association" "private-asso" {
+  subnet_id      = aws_subnet.private-subnet.id
+  route_table_id = aws_route_table.private-rt.id
+}
+#ec2 code
+resource "aws_instance" "aishwarya-server" {
+  ami             = "ami-07caf09b362be10b8"
+  subnet_id       = aws_subnet.public-subnet.id
+  instance_type   = "t2.micro"
+  security_groups = ["${aws_security_group.test_access.id}"]
+  key_name        = "ltimindtree"
+  tags = {
+    Name     = "test-world"
+    Stage    = "testing"
+    Location = "chennai"
+  }
+}
+#create an EIP for ec2
+resource "aws_eip" "aishwarya-ec2-eip" {
+  instance = aws_instance.aishwarya-server.id
+}
+#ssh keypair code
+resource "aws_key_pair" "ltitestkey" {
+  key_name   = "ltimindtree"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDTlYZQJqZpAjQ6GfiOVsgdhLhxWLBvY2GwCLHXgRKx5s1hkgnhLESUl+sJokWwrjj2v6gEqTg/K1/o+uIRUvX7fdCVB1QyaH2eGjH+M3YJXte2/9iO1CHBfHyUWt6QnaGF5PCvTfgpr///wpW1Py0F4sDRsLYcxBxrVDUF6jgLY5/NHjHcgHZ/De/pPDKwDjUGr/N+A2D/brz0nsBqcrHWqL2wTMVUYz8rWktTlcRpzw1L4kYsi5HkGVs/xYyIuHYNEOxXJR6SS9goFkPuIAzF+pBT7Q6x8pGkPTgqo4XBgmndCd6rLNttIu5TRTpAnrDdpLHUUgzLyqeVfUFg+TIv37dtXp1V9HXebZ6+hgRFLFa32mrSJOSKtavd1s/bwpWZVT8BE4mqJ/8nIVBkbrAAkNe5a4xuWj0z9hfa+X/MZ0FYoj2aEnBYcOWLrB9A2i7U2vKkHhDgRhyXn5n6xJOYrQR3BllLMpDgeSQWe/lC9AK1sLct2rTmhN+2V3yM1Gk= root@ip-172-31-1-154.ec2.internal"
+}
+###This is database ec2 code
+resource "aws_instance" "database_server" {
+  ami             = "ami-07caf09b362be10b8"
+  subnet_id       = aws_subnet.private-subnet.id
+  instance_type   = "t2.micro"
+  security_groups = ["${aws_security_group.test_access.id}"]
+  key_name        = "ltimindtree"
+  tags = {
+    Name     = "db-world"
+    Stage    = "stage-base"
+    Location = "delhi"
+  }
+}
+resource "aws_security_group" "test_access" {
+  name        = "test_access"
+  description = "Allow TLS inbound traffic and all outbound traffic"
+  vpc_id      = aws_vpc.test-vpc.id
+  tags = {
+    Name = "test_access"
+  }
+}
+resource "aws_vpc_security_group_ingress_rule" "allow_ssh" {
+  security_group_id = aws_security_group.test_access.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 22
+  ip_protocol       = "tcp"
+  to_port           = 22
+}
+resource "aws_vpc_security_group_ingress_rule" "allow_http" {
+  security_group_id = aws_security_group.test_access.id
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  ip_protocol       = "tcp"
+  to_port           = 80
+}
+resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
+  security_group_id = aws_security_group.test_access.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1" # semantically equivalent to all ports
+}
+###here ending security group code
+ 
+ 
+Step 6:
+terraform init
+terraform fmt
+terraform validate
+terraform plan
+terraform apply
