@@ -1,0 +1,66 @@
+provider "aws" {
+  region = "ap-south-1"
+}
+
+data "aws_security_group" "existing_sg" {
+  name = "new-sg"
+}
+
+#security group end here
+
+resource "aws_eip" "vol-eip" {
+  instance = aws_instance.volume.id
+
+}
+resource "aws_instance" "volume" {
+  ami               = "ami-0ec0e125bb6c6e8ec"
+  availability_zone = "ap-south-1a"
+  instance_type     = "t2.micro"
+  vpc_security_group_ids = [data.aws_security_group.existing_sg.id]
+
+  /* the key mumbai-key must be downloaded in your machine from where
+  you are executing this code. So first create the key, download it
+  and then use it */
+
+  key_name = "mumbai-key"
+
+  #root disk
+
+  root_block_device {
+    volume_size           = "25"
+    volume_type           = "gp2"
+    delete_on_termination = true
+  }
+
+  #additional data disk
+
+  ebs_block_device {
+    device_name           = "/dev/xvdb"
+    volume_size           = "10"
+    volume_type           = "gp2"
+    delete_on_termination = true
+
+  }
+
+  user_data = <<-EOF
+        #!/bin/bash
+        sudo apt update
+        sudo apt install apache2 -y
+        sudo systemctl start apache2
+        sudo systemctl enable apache2
+        echo "<h1>sample webserver using terraform</h1>" | sudo tee /var/www/html/index.html
+  EOF
+  tags = {
+    Name     = "Hello-Yaseen"
+    Stage    = "testing"
+    Location = "India"
+  }
+
+}
+
+
+
+resource "aws_key_pair" "deployer" {
+  key_name   = "yas-key"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCV2k25IEUiczJyXfGp7bllCfUbKNQxLOM6R1qbbG6jmyEQfV9uD012ZqoXCWqmvlnsaWgFrU6bkOlaKoNUVEPV2KWdLOALrWtePsMkSddq2VAsuzKaPd5wJtaLoKYLY78emGtQ2pSJTG1YzFy+pvudRuTDbzF2hlkVaac77GZmXwFGBRiD+ul5E17eTFlHFMIcy8s5XMUX/oAt1MKjRimQFjytbKKWUr5Q4epa+FNgNe92R+/yPKT6qGH/GyQbAg8KodsTzt1OTAsqrak+0nJmm+vf2zUXDvqL4YZ8HW20rQnekf+js5Rq7/ZE/O+V3Nk4r48LBzJlYX04kC0kdreeGMc6uaIvxyiKoxSrEhGvx80sKxeCvNbnJkKjArjMVYobxO6T4vOVZyjqOVpTwMJTaIbLrMYeXRSEehy1CTBl57Mgqw2thsS3bdo3z6Hn0J6DEm8NXHj8HL4BE9BK6//Nr83OhPwXf3JGCUvspnkGRV7NooVhFAcE/yKBqkb+Dl6DCNBs4F7R8aYkSLp/UsRvp3QZomglOU3Iq85ZqYEyJF4sDBpbBzxtdrzZ7vNSzIiTAvaN5Hi9ybi4D2b6NBS4OIYY3m4CAk7xrKgG0iCB3fDACIvmJYtmBnu2QFGKguTu9ModaKTXbTlTDA5i24S8rr+mT5f649dMC9aSsgQeaQ== root@ip-172-31-47-96"
+}
